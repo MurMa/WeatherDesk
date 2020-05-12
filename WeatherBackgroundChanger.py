@@ -4,7 +4,6 @@ import datetime
 import time
 from datetime import date
 import schedule
-from threading import Thread
 
 # Thanks u/OpenSourcerer420 for the idea!
 # https://www.reddit.com/r/Python/comments/gfkuez/my_first_python_program_changes_my_desktop/
@@ -30,6 +29,8 @@ from PIL import Image
 api_address='http://api.openweathermap.org/data/2.5/weather?appid='
 
 weather_url = api_address + API_KEY + '&q=' + CITY
+weather_state = "?"
+showSettings = False
 
 print("Started WeatherBackgroundChanger")
 print("Picture Path:",PICTURE_PATH)
@@ -38,21 +39,18 @@ print("Refresh seconds:",REFRESH_SECONDS)
 
 image = Image.open("WeatherDeskIcon.png")
 
-# item('Call something', lambda :  method())
+def setupSchedule(icon):
+    icon.visible = True
+    updateBackground(icon)
+    schedule.every(REFRESH_SECONDS).seconds.do(updateBackground, icon)
+    runSchedule()
 
 def runSchedule():
-    while True:
+    while schedule.next_run() is not None:
         schedule.run_pending()
 
-def setupSchedule():
-    icon.visible = True
-    updateBackground()
-    schedule.every(REFRESH_SECONDS).seconds.do(updateBackground)
-    t = Thread(group=None,target=runSchedule)
-    t.daemon = True
-    t.start()
-
-def updateBackground():
+def updateBackground(icon):
+    global weather_state
     print("Updating Background...")
     timestamp = datetime.datetime.now().time()
     start_night = datetime.time(18, 1)
@@ -62,6 +60,8 @@ def updateBackground():
     json_data = requests.get(weather_url).json()
     print("data:",json_data)
     weather_state = json_data["weather"][0]["main"]
+
+    icon.update_menu()
 
     # Sunday
     # if date.today().weekday() == 6:
@@ -105,12 +105,59 @@ def setBackground(pictureName):
     if not success:
         print(ctypes.WinError())
 
+def getCurrentWeatherString(icon):
+    return "Current: " + weather_state
+
+def showSettings(icon):
+    global showSettings
+    print("Showing settings")
+    startGuiThread()
+
 def exitProgram():
     print("Exiting")
+    schedule.clear()
     icon.stop()
 
-menu = (item('Refresh', updateBackground), item('Exit', exitProgram))
-icon = pystray.Icon("WeatherDeskTray", image, "WeatherDesk", menu)
-icon.run(setupSchedule())
+# GUI ---------------------------------------------------
+import tkinter as tk
+import threading
+
+class Application(tk.Frame):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.master = master
+        # Dark gray: #151819
+        self.master.overrideredirect(True)
+        self.master.title("WeatherDesk settings")
+        self.master.iconphoto(False, tk.PhotoImage(file='WeatherDeskIcon.png'))
+        self.master.geometry('350x200')
+        self.master.resizable(width=False, height=False)
+        self.master['bg'] = "#151819"
+        self.pack()
+        self.create_widgets()
+        self.master.bind("<Escape>", lambda e: e.widget.quit())
+
+    def create_widgets(self):
+        self.quit = tk.Button(self, text="QUIT", bg="white", fg="red",
+                              command=self.master.destroy)
+        self.quit.pack(side="bottom")
+
+def tkinterGui():
+    root = tk.Tk()
+    app = Application(master=root)
+    root.mainloop()
+
+def startGuiThread():    
+    GUI = threading.Thread(target=tkinterGui)
+    GUI.start()
+    # GUI.join()
+
+# GUI END ---------------------------------------------------
+
+icon = pystray.Icon("WeatherDeskTray", image, "WeatherDesk")
+menu = (item('Settings', showSettings), item(getCurrentWeatherString, updateBackground, default=True), item('Refresh', updateBackground), item('Exit', exitProgram))
+icon.menu = menu
+icon.run(setupSchedule)
 
 icon.stop()
+schedule.clear()
