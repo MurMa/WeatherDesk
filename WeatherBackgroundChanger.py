@@ -5,26 +5,24 @@ import time
 from datetime import date
 import schedule
 
+import pystray
+from pystray import MenuItem as item
+from PIL import Image, ImageDraw
+import os
+from dotenv import load_dotenv
+
 # Thanks u/OpenSourcerer420 for the idea!
 # https://www.reddit.com/r/Python/comments/gfkuez/my_first_python_program_changes_my_desktop/
 
 # Configuration
-from dotenv import load_dotenv
 load_dotenv()
 
-import os
 USER_PATH = os.path.expanduser('~')
 PICTURE_PATH = USER_PATH + os.getenv("BACKGROUND_PICTURE_PATH")
 API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 CITY = os.getenv("HOME_TOWN")
 REFRESH_SECONDS = int(os.getenv("BACKGROUND_REFRESH_SECONDS"))
 SPI_SETDESKWALLPAPER = 20
-
-# Tray Icon
-import pystray
-from pystray import MenuItem as item
-from PIL import Image
-
 
 api_address='http://api.openweathermap.org/data/2.5/weather?appid='
 
@@ -60,8 +58,11 @@ def updateBackground(icon):
     json_data = requests.get(weather_url).json()
     print("data:",json_data)
     weather_state = json_data["weather"][0]["main"]
+    icon_name = json_data["weather"][0]["icon"]
 
     icon.update_menu()
+    image = Image.open("icons8/" + icon_name + ".png")
+    icon.icon = image
 
     # Sunday
     # if date.today().weekday() == 6:
@@ -127,15 +128,25 @@ class Application(tk.Frame):
         super().__init__(master)
         self.master = master
         # Dark gray: #151819
-        self.master.overrideredirect(True)
+
         self.master.title("WeatherDesk settings")
         self.master.iconphoto(False, tk.PhotoImage(file='WeatherDeskIcon.png'))
+        # self.master.resizable(width=False, height=False)
         self.master.geometry('350x200')
-        self.master.resizable(width=False, height=False)
         self.master['bg'] = "#151819"
-        self.pack()
-        self.create_widgets()
         self.master.bind("<Escape>", lambda e: e.widget.quit())
+        
+        self.create_widgets()
+        self.pack()
+
+        # windowWidth = self.master.winfo_reqwidth()
+        # windowHeight = self.master.winfo_reqheight()
+        # print("Width",windowWidth,"Height",windowHeight)
+        # Gets both half the screen width/height and window width/height
+        # positionRight = int(self.master.winfo_screenwidth()/2 - windowWidth/2)
+        # positionDown = int(self.master.winfo_screenheight()/2 - windowHeight/2)
+        # self.master.geometry('+{}+{}'.format(positionRight, positionDown))
+
 
     def create_widgets(self):
         self.quit = tk.Button(self, text="QUIT", bg="white", fg="red",
@@ -154,8 +165,9 @@ def startGuiThread():
 
 # GUI END ---------------------------------------------------
 
+# Tray Icon
 icon = pystray.Icon("WeatherDeskTray", image, "WeatherDesk")
-menu = (item('Settings', showSettings), item(getCurrentWeatherString, updateBackground, default=True), item('Refresh', updateBackground), item('Exit', exitProgram))
+menu = (item('Settings', showSettings, default=True), item(getCurrentWeatherString, updateBackground), item('Refresh', updateBackground), item('Exit', exitProgram))
 icon.menu = menu
 icon.run(setupSchedule)
 
